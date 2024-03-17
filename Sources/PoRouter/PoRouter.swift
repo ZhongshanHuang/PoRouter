@@ -3,15 +3,8 @@
 
 import UIKit
 
-enum Constant {
-    static let appleBundleSuffix = "com.apple"
-    static let saveRegisterVersionKey = "saveRegisterVersionKey"
-    static let saveRegisterCacheKey = "saveRegisterCacheKey"
-}
-
 extension PoRouter {
-    public typealias Context = Any
-    public typealias Pattern = String
+    public typealias Context = [String: Any]
     
     public enum RouteType {
         case push
@@ -38,12 +31,16 @@ public final class PoRouter {
     // MARK: - Register
     public func register<Map: PoRouterableComponentMap>(map: Map.Type) {
         map.allCases.forEach { mapItem in
-            register(mapItem.pattern, for: mapItem.component)
+            register(mapItem.component.routerPattern, for: mapItem.component)
         }
     }
     
-    public func register(_ pattern: Pattern, for routeComponent: PoRouterableComponent.Type) {
-        patternMatcher[routeComponent.routerPattern] = routeComponent.self
+    public func register(_ pattern: PatternConvertible, for routeComponent: PoRouterableComponent.Type) {
+        var pattern = routeComponent.routerPattern.asPattern
+        if scheme != nil, !pattern.hasPrefix(scheme) {
+            pattern = scheme + pattern
+        }
+        patternMatcher[pattern] = routeComponent.self
     }
     
     /// 自动将所有符合PoRouterableComponent和UIViewController注册
@@ -62,7 +59,7 @@ public final class PoRouter {
             for className in cache {
                 guard let classItem = NSClassFromString(className) else { continue }
                 if let routerableClass = classItem as? PoRouterableComponent.Type {
-                    patternMatcher[routerableClass.routerPattern] = routerableClass
+                    patternMatcher[routerableClass.routerPattern.asPattern] = routerableClass
                 }
             }
             return
@@ -87,7 +84,7 @@ public final class PoRouter {
                 guard let classItem = NSClassFromString(className) else { continue }
                 
                 if classItem is UIViewController.Type, let routerableClass = classItem as? PoRouterableComponent.Type {
-                    var pattern = routerableClass.routerPattern
+                    var pattern = routerableClass.routerPattern.asPattern
                     if scheme != nil, !pattern.hasPrefix(scheme) {
                         pattern = scheme + pattern
                     }
@@ -180,3 +177,8 @@ public final class PoRouter {
 
 }
 
+private enum Constant {
+    static let appleBundleSuffix = "com.apple"
+    static let saveRegisterVersionKey = "saveRegisterVersionKey"
+    static let saveRegisterCacheKey = "saveRegisterCacheKey"
+}

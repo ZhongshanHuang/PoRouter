@@ -10,7 +10,7 @@ import UIKit
 extension UIViewController {
     
     static var poCurrentViewController: UIViewController? {
-        UIViewController.topViewController(of: UIApplication.shared.poCurrentkeyWindow?.rootViewController)
+        UIViewController.topViewController(of: UIApplication.shared.poCurrentKeyWindow?.rootViewController)
     }
     
     private static func topViewController(of viewController: UIViewController?) -> UIViewController? {
