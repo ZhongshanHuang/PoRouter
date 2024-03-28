@@ -116,11 +116,16 @@ public final class PoRouter {
     
     public func push(_ url: String, ctx: Context? = nil, from: UINavigationController? = nil, animated: Bool = true) throws {
         do {
-            let vc = try buildRouterableComponent(url: url, ctx: ctx)
-            guard let navigationController = from ?? UIViewController.poCurrentViewController?.navigationController else {
-                throw PoRouterError.noPushBase(url: url)
+            let res = try buildRouterableResult(url: url, ctx: ctx)
+            switch res {
+            case .page(let vc):
+                guard let navigationController = from ?? UIViewController.poCurrentViewController?.navigationController else {
+                    throw PoRouterError.noPushBase(url: url)
+                }
+                navigationController.pushViewController(vc, animated: animated)
+            case .action(let action):
+                action()
             }
-            navigationController.pushViewController(vc, animated: animated)
         } catch let error as PoRouterError {
             errorHandler?(error)
             throw error
@@ -129,16 +134,19 @@ public final class PoRouter {
         
     public func present(_ url: String, ctx: Context? = nil, wrap: UINavigationController.Type? = nil, from: UIViewController? = nil, animated: Bool = true, completion: (() -> Void)? = nil) throws {
         do {
-            var vc: UIViewController = try buildRouterableComponent(url: url, ctx: ctx)
-            if let wrapType = wrap {
-                vc = wrapType.init(rootViewController: vc)
+            let res = try buildRouterableResult(url: url, ctx: ctx)
+            switch res {
+            case .page(var vc as UIViewController):
+                if let wrapType = wrap {
+                    vc = wrapType.init(rootViewController: vc)
+                }
+                guard let fromViewController = from ?? UIViewController.poCurrentViewController else {
+                    throw PoRouterError.noPresentBase(url: url)
+                }
+                fromViewController.present(vc, animated: animated, completion: completion)
+            case .action(let action):
+                action()
             }
-
-            guard let fromViewController = from ?? UIViewController.poCurrentViewController else {
-                throw PoRouterError.noPresentBase(url: url)
-            }
-            
-            fromViewController.present(vc, animated: animated, completion: completion)
         } catch let error as PoRouterError {
             errorHandler?(error)
             throw error
@@ -146,7 +154,7 @@ public final class PoRouter {
     }
             
     // MARK: - Helper
-    private func buildRouterableComponent(url: String, ctx: Context? = nil) throws -> PoRouterableComponent {
+    private func buildRouterableResult(url: String, ctx: Context? = nil) throws -> PoRouterableResult {
         var url = url
         if scheme != nil, !url.hasPrefix(scheme) {
             url = scheme + url
