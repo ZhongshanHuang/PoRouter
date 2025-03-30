@@ -8,7 +8,7 @@ extension PoRouter {
     
     public enum RouteType {
         case push
-        case present
+        case present(wrapper: UINavigationController.Type? = nil, modalPresentationStyle: UIModalPresentationStyle = .fullScreen)
     }
 }
 
@@ -18,6 +18,7 @@ public final class PoRouter {
     
     private var patternMatcher: [String: PoRouterableComponent.Type] = [:]
     private var errorHandler: ((PoRouterError) -> Void)?
+    private var interruptHandler: ((_ url: String, _ pattern: PatternConvertible, _ params: Parameters?, _ ctx: PoRouter.Context?) -> Bool)?
     private init() {}
         
     public func config(with scheme: String) {
@@ -26,6 +27,10 @@ public final class PoRouter {
     
     public func configGlobalErrorHandler(_ errorHandler: @escaping (PoRouterError) -> Void) {
         self.errorHandler = errorHandler
+    }
+    
+    public func configGlobalInterruptHandler(_ interruptHandler: @escaping (_ url: String, _ pattern: PatternConvertible, _ params: Parameters?, _ ctx: PoRouter.Context?) -> Bool) {
+        self.interruptHandler = interruptHandler
     }
     
     // MARK: - Register
@@ -103,57 +108,66 @@ public final class PoRouter {
         UserDefaults.standard.removeObject(forKey: Constant.saveRegisterVersionKey)
     }
     
+    public func matchPattern(_ pattern: String) -> Bool {
+        patternMatcher.contains(where: { $0.value.routerPattern.asPattern == pattern })
+    }
+    
     // MARK: Route
     
-    public func route(_ url: String, ctx: Context? = nil, type: RouteType = .push) throws {
-        switch type {
-        case .push:
-            try push(url, ctx: ctx, from: nil, animated: true)
-        case .present:
-            try present(url, ctx: ctx, wrap: nil, from: nil, animated: true, completion: nil)
+    public func route(_ url: String, ctx: Context? = nil, type: RouteType? = nil) throws {
+        do {
+            let res = try buildRouterableResult(url: url, ctx: ctx)
+            let current = UIViewController.poCurrentViewController
+            if current?.isBeingDismissed == true || current?.navigationController?.isBeingDismissed == true {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: {
+                    try? self.handleRouterableResult(current: UIViewController.poCurrentViewController, result: res, url: url, type: type)
+                })
+                return
+            }
+            
+            try handleRouterableResult(current: current, result: res, url: url, type: type)
+        } catch let error as PoRouterError {
+            errorHandler?(error)
+            throw error
         }
     }
     
-    public func push(_ url: String, ctx: Context? = nil, from: UINavigationController? = nil, animated: Bool = true) throws {
-        do {
-            let res = try buildRouterableResult(url: url, ctx: ctx)
-            switch res {
-            case .page(let vc):
-                guard let navigationController = from ?? UIViewController.poCurrentViewController?.navigationController else {
-                    throw PoRouterError.noPushBase(url: url)
-                }
-                navigationController.pushViewController(vc, animated: animated)
-            case .action(let action):
-                action()
+    // MARK: - Helper
+    
+    private func handleRouterableResult(current: UIViewController?, result: PoRouterableResult, url: String, type: RouteType? = nil) throws {
+        switch result {
+        case .component(let vc, let preferredRouteType):
+            let routeType = type ?? preferredRouteType
+            switch routeType {
+            case .push:
+                try push(fromVC: current, toVC: vc, url: url)
+            case let .present(wrapper, modalPresentationStyle):
+                try present(fromVC: current, toVC: vc, wrapper: wrapper, modalPresentationStyle: modalPresentationStyle, url: url)
             }
-        } catch let error as PoRouterError {
-            errorHandler?(error)
-            throw error
+        case .action(let action):
+            action()
         }
+    }
+    
+    private func push(fromVC: UIViewController?, toVC: UIViewController, animated: Bool = true, url: String) throws {
+        guard let navigationController = fromVC?.navigationController else {
+            throw PoRouterError.noPushBase(url: url)
+        }
+        navigationController.pushViewController(toVC, animated: animated)
     }
         
-    public func present(_ url: String, ctx: Context? = nil, wrap: UINavigationController.Type? = nil, from: UIViewController? = nil, animated: Bool = true, completion: (() -> Void)? = nil) throws {
-        do {
-            let res = try buildRouterableResult(url: url, ctx: ctx)
-            switch res {
-            case .page(var vc as UIViewController):
-                if let wrapType = wrap {
-                    vc = wrapType.init(rootViewController: vc)
-                }
-                guard let fromViewController = from ?? UIViewController.poCurrentViewController else {
-                    throw PoRouterError.noPresentBase(url: url)
-                }
-                fromViewController.present(vc, animated: animated, completion: completion)
-            case .action(let action):
-                action()
-            }
-        } catch let error as PoRouterError {
-            errorHandler?(error)
-            throw error
+    private func present(fromVC: UIViewController?, toVC: UIViewController, wrapper: UINavigationController.Type?, modalPresentationStyle: UIModalPresentationStyle, animated: Bool = true, url: String) throws {
+        guard let fromVC else {
+            throw PoRouterError.noPresentBase(url: url)
         }
+        var toVC = toVC
+        if let wrapper {
+            toVC = wrapper.init(rootViewController: toVC)
+        }
+        toVC.modalPresentationStyle = modalPresentationStyle
+        fromVC.present(toVC, animated: animated, completion: nil)
     }
             
-    // MARK: - Helper
     private func buildRouterableResult(url: String, ctx: Context? = nil) throws -> PoRouterableResult {
         var url = url
         if scheme != nil, !url.hasPrefix(scheme) {
@@ -167,6 +181,10 @@ public final class PoRouter {
         var params: Parameters?
         if urlComponents.count == 2 { // has query
             params = extractForms(from: urlComponents[1])
+        }
+        
+        if interruptHandler?(url, urlComponents[0], params, ctx) == true {
+            throw PoRouterError.interrupt(url: url)
         }
         
         return routeComponent.routeComponent(with: params, ctx: ctx)

@@ -8,11 +8,11 @@
 import UIKit
 
 public enum PoRouterableResult {
-    case page(PoRouterableComponent & UIViewController)
+    case component(_ component: PoRouterableComponent, _ type: PoRouter.RouteType = .push)
     case action(() -> Void)
 }
 
-public protocol PoRouterableComponent {
+public protocol PoRouterableComponent : UIViewController {
     static var routerPattern: any PatternConvertible { get }
     static func routeComponent(with params: Parameters?, ctx: PoRouter.Context?) -> PoRouterableResult
 }

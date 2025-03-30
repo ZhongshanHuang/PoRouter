@@ -16,3 +16,9 @@ extension String: PatternConvertible {
         self
     }
 }
+
+extension URL: PatternConvertible {
+    public var asPattern: String {
+        absoluteString
+    }
+}
