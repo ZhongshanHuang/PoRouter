@@ -8,7 +8,7 @@
 import UIKit
 
 public enum PoRouterableResult {
-    case component(_ component: PoRouterableComponent, _ type: PoRouter.RouteType = .push)
+    case component(_ component: PoRouterableComponent, _ type: PoRouter.RouteType = .push(animated: true))
     case action(() -> Void)
 }
 

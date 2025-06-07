@@ -7,8 +7,9 @@ extension PoRouter {
     public typealias Context = [String: Any]
     
     public enum RouteType {
-        case push
-        case present(wrapper: UINavigationController.Type? = nil, modalPresentationStyle: UIModalPresentationStyle = .fullScreen)
+        case push(animated: Bool = true)
+        case present(wrapper: UINavigationController.Type? = nil, modalPresentationStyle: UIModalPresentationStyle = .fullScreen,
+                     animated: Bool = true)
     }
 }
 
@@ -139,10 +140,10 @@ public final class PoRouter {
         case .component(let vc, let preferredRouteType):
             let routeType = type ?? preferredRouteType
             switch routeType {
-            case .push:
-                try push(fromVC: current, toVC: vc, url: url)
-            case let .present(wrapper, modalPresentationStyle):
-                try present(fromVC: current, toVC: vc, wrapper: wrapper, modalPresentationStyle: modalPresentationStyle, url: url)
+            case let .push(animated):
+                try push(fromVC: current, toVC: vc, animated: animated, url: url)
+            case let .present(wrapper, modalPresentationStyle,animated):
+                try present(fromVC: current, toVC: vc, wrapper: wrapper, modalPresentationStyle: modalPresentationStyle,animated: animated, url: url)
             }
         case .action(let action):
             action()
